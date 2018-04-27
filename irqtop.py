@@ -2,8 +2,9 @@
 """
 Display in a curse windows irq/s rate
 
-
-Author : Sebastien Wacquiez <sw@enix.org>
+Change log:
+ * Sebastien Wacquiez <sw@enix.org>: original implementation
+ * Rafal Rowniak <rrowniak@gmail.com>: Batch-mode operation, PEP 8 compliance
 """
 import os
 import re
@@ -12,14 +13,16 @@ import curses
 import select
 import sys
 import errno
+import optparse
 
-DELAY=1000
-intrfile="/proc/interrupts"
+DELAY = 1000
+intrfile = "/proc/interrupts"
 
 
 def diffpersecond(newvalues, oldvalues, elapsed):
     assert len(newvalues) == len(oldvalues), "new and old values should be list of the same lenght"
-    return map(lambda a: "%s"%int((int(a[0]) - int(a[1]))/elapsed), zip(newvalues, oldvalues))
+    return map(lambda a: "%s" % int((int(a[0]) - int(a[1])) / elapsed), zip(newvalues, oldvalues))
+
 
 class IrqStats(object):
     def __init__(self, filename):
@@ -32,8 +35,8 @@ class IrqStats(object):
         self.cpucount = len(tmp.strip().split())
         self.scroll = 0
         self.hscroll = 0
-    
-    def gather(self):        
+
+    def gather(self):
         data = file(self.filename).read()
         tt = time.time()
         data = re.sub(" +", " ", data)
@@ -49,9 +52,9 @@ class IrqStats(object):
             intr = line[0].strip().strip(":")
             result[intr] = {
                 "intr": intr,
-                "raw": line[1:cpucount+1],
-                "desc" : " ".join(line[cpucount+1:]),
-                }
+                "raw": line[1:cpucount + 1],
+                "desc": " ".join(line[cpucount + 1:]),
+            }
         if self.lastrun:
             elapsed = tt - self.lastrun
             for k, v in self.last.items():
@@ -60,14 +63,15 @@ class IrqStats(object):
                 self.stats[k]["rate"] = diffpersecond(result[k]["raw"], v["raw"], elapsed)
         self.lastrun = tt
         self.last = result
+
     def print_stats(self):
         if not self.stats:
             return
-        print "\x1b[2J\x1b[H"
-        print "\t", "\t".join([ "CPU%s"%i for i in range(self.cpucount) ])
+        # print "\x1b[2J\x1b[H"
+        print "\t", "\t".join(["CPU%s" % i for i in range(self.cpucount)])
         for k in sorted(self.stats.keys()):
             v = self.stats[k]
-            print "%s\t"%k, "\t".join(v["rate"]), "\t",v["desc"]
+            print "%s\t" % k, "\t".join(v["rate"]), "\t", v["desc"]
 
     def curses_keypress(self, key):
         if key == curses.KEY_UP:
@@ -78,7 +82,6 @@ class IrqStats(object):
             self.hscroll = max(0, self.hscroll - 1)
         elif key == curses.KEY_RIGHT:
             self.hscroll = max(0, self.hscroll + 1)
-           
 
     def curses_stats(self, win):
         if not self.stats:
@@ -89,19 +92,18 @@ class IrqStats(object):
         stop = start + height - 1
         hstart = 0 + self.hscroll
         hstop = hstart + width - 2
-        win.addstr(0,0, ("     " + "".join([ "% 7s"%("CPU%s"%i) for i in range(self.cpucount)] + [ "% 7s"%"TOTAL" ]))[hstart:hstop], curses.A_REVERSE)
+        win.addstr(0, 0, ("     " + "".join(["% 7s" % ("CPU%s" % i) for i in range(self.cpucount)]
+                                            + ["% 7s" % "TOTAL"]))[hstart:hstop], curses.A_REVERSE)
+
         i = 1
         for k in sorted(self.stats.keys())[start:stop]:
             v = self.stats[k]
-            v["rate"].append("%s"%sum([long(val) for val in v["rate"]]))
-            win.addstr(i, 1, ("% 4s"%k +  "".join(
-                [ "% 7s"%r for r in v["rate"]])
-                + "  " + v["desc"])[hstart:hstop])
+            v["rate"].append("%s" % sum([long(val) for val in v["rate"]]))
+            win.addstr(i, 1, ("% 4s" % k + "".join(["% 7s" % r for r in v["rate"]]) + "  " + v["desc"])[hstart:hstop])
             i += 1
         win.refresh()
 
 
-              
 def run_irqtop(win):
     irq = IrqStats(intrfile)
     curses.curs_set(0)
@@ -109,7 +111,7 @@ def run_irqtop(win):
     win.keypad(1)
     win.nodelay(1)
     poll = select.poll()
-    poll.register(sys.stdin.fileno(), select.POLLIN|select.POLLPRI)
+    poll.register(sys.stdin.fileno(), select.POLLIN | select.POLLPRI)
     irq.gather()
     irq.curses_stats(win)
     while True:
@@ -132,6 +134,22 @@ def run_irqtop(win):
         irq.gather()
         irq.curses_stats(win)
 
-    
 
-curses.wrapper(run_irqtop)
+def batch_irqtop():
+    irq_stats = IrqStats(intrfile)
+    for _ in range(options.n):
+        irq_stats.gather()
+        time.sleep(1.0)
+        irq_stats.gather()
+        irq_stats.print_stats()
+
+parser = optparse.OptionParser(description='Display irq/s rate.')
+parser.add_option('-b', action='store_true', help='Batch-mode operation')
+parser.add_option('-n', nargs=1, type=int, help='Number of iterations')
+
+options, args = parser.parse_args()
+
+if not options.b:
+    curses.wrapper(run_irqtop)
+else:
+    batch_irqtop()
