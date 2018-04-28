@@ -135,21 +135,30 @@ def run_irqtop(win):
         irq.curses_stats(win)
 
 
-def batch_irqtop():
+def batch_irqtop(n):
     irq_stats = IrqStats(intrfile)
-    for _ in range(options.n):
+    for _ in range(n):
         irq_stats.gather()
         time.sleep(1.0)
         irq_stats.gather()
         irq_stats.print_stats()
 
-parser = optparse.OptionParser(description='Display irq/s rate.')
-parser.add_option('-b', action='store_true', help='Batch-mode operation')
-parser.add_option('-n', nargs=1, type=int, help='Number of iterations')
 
-options, args = parser.parse_args()
+def main(argv):
+    try:
+        parser = optparse.OptionParser(description='Display irq/s rate.')
+        parser.add_option('-b', action='store_true', help='Batch-mode operation')
+        parser.add_option('-n', nargs=1, type=int, default=1, help='Number of iterations')
 
-if not options.b:
-    curses.wrapper(run_irqtop)
-else:
-    batch_irqtop()
+        options, args = parser.parse_args()
+
+        if not options.b:
+            curses.wrapper(run_irqtop)
+        else:
+            batch_irqtop(options.n)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
